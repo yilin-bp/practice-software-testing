@@ -25,13 +25,14 @@ services:
     working_dir: /app
     volumes:
       - ./${SPRINT}/UI:/app:cached
+      - angular-ui-node-modules:/app/node_modules
       - ./.git:/repo/.git:ro
     ports:
       - 4200:4200
     environment:
       - GIT_DIR=/repo/.git
     command: >
-      bash -c "npm install --force && node set-version.js && ng serve --host 0.0.0.0 --port 4200"
+      bash -c "if [ ! -f node_modules/.install-stamp ] || [ package-lock.json -nt node_modules/.install-stamp ]; then npm install --force && touch node_modules/.install-stamp; fi && node set-version.js && ng serve --host 0.0.0.0 --port 4200"
 
   # The Web Server
   web:
@@ -70,3 +71,4 @@ services:
 
 volumes:
   laravel-api:
+  angular-ui-node-modules:

@@ -89,6 +89,131 @@ docker compose -f docker-compose.prod.yml up --pull missing -d
 
 Update the `SPRINT` in [.env](.env) to use the proper version that belongs to the sprint.
 
+## Sprint 5 quick restart (dev stack)
+
+Use this if you want to close everything and start again quickly.
+
+### Fast start
+
+1. Ensure sprint5 is selected in `.env`:
+
+```bash
+SPRINT=sprint5
+```
+
+2. Start the local development stack:
+
+```bash
+docker compose up -d
+```
+
+3. Verify the main services:
+
+```bash
+curl -i http://localhost:8091/status
+curl -i "http://localhost:8091/products?page=1"
+```
+
+4. Open the app:
+
+```text
+http://localhost:4200
+```
+
+Expected:
+
+* Product cards are visible on the home page.
+* API status returns JSON with version/environment.
+
+### Is this live-reload dev mode?
+
+Yes.
+
+* UI code is source-mounted from `./${SPRINT}/UI` and served with `ng serve`.
+* API code is source-mounted from `./${SPRINT}/API`.
+* Frontend changes should appear automatically in the browser.
+
+### Troubleshooting (problems we hit and fixes)
+
+#### Problem: UI starts but product cards do not load
+
+Symptoms:
+
+* Empty/skeleton cards.
+* Browser console shows failed requests.
+
+Fix sequence:
+
+1. Check API health:
+
+```bash
+curl -i http://localhost:8091/status
+curl -i "http://localhost:8091/products?page=1"
+```
+
+2. If responses contain a PHP fatal error about `vendor/autoload.php` missing, install API dependencies:
+
+```bash
+docker compose run --rm --entrypoint sh composer -lc "composer config --global process-timeout 1800; composer install --no-dev --optimize-autoloader --ignore-platform-req=ext-ffi --no-interaction"
+```
+
+3. If `/products` returns an error because tables are missing, apply schema and seed data:
+
+```bash
+docker compose exec laravel-api php artisan migrate --force
+docker compose exec laravel-api php artisan db:seed --force
+```
+
+4. Reload `http://localhost:4200`.
+
+#### Problem: CORS errors in browser console
+
+Checks:
+
+```bash
+curl -i -X OPTIONS -H "Origin: http://localhost:4200" -H "Access-Control-Request-Method: GET" http://localhost:8091/products
+```
+
+Expected headers include `Access-Control-Allow-Origin`.
+
+Note:
+
+* We observed CORS-like browser failures while the API was fatally broken.
+* Once Composer dependencies and DB were fixed, the endpoints returned correct CORS headers.
+
+#### Problem: startup is slow
+
+Notes:
+
+* First startup can still take a while due to image pulls and the initial `npm install` in the UI container.
+* Subsequent UI starts are faster because `node_modules` is cached in a named Docker volume and `npm install` is only rerun when needed.
+
+Avoid this if you want faster restarts:
+
+```bash
+docker compose down -v
+```
+
+This removes volumes and may force expensive reinstall/reseed work next time.
+
+### Copilot prompt for quick setup/recovery
+
+Use this prompt in GitHub Copilot Chat:
+
+```text
+In this repository, bring up sprint5 local development quickly.
+1) Verify .env uses SPRINT=sprint5.
+2) Run docker compose up -d.
+3) Verify http://localhost:4200 and http://localhost:8091/status.
+4) If API shows vendor/autoload.php missing, run:
+	docker compose run --rm --entrypoint sh composer -lc "composer config --global process-timeout 1800; composer install --no-dev --optimize-autoloader --ignore-platform-req=ext-ffi --no-interaction"
+5) If products fail due to missing tables/data, run:
+	docker compose exec laravel-api php artisan migrate --force
+	docker compose exec laravel-api php artisan db:seed --force
+6) Re-verify products endpoint and confirm the home page product cards are visible.
+7) Report final status and any remaining blockers.
+```
+
 ## Roll Back - Run Migrations - Seed Database
 
 `docker exec -it pst-laravel-api-1 php artisan migrate:fresh --seed`
